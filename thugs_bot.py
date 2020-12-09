@@ -1,7 +1,7 @@
 import sqlite3,datetime, telebot
 
-admin_usernames =['Hammerloaf','mikeythug1']
-bot = telebot.TeleBot("1314718679:AAFXwfK5fTfdwGseYVYqoBCW5jw9HE2poF4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
+bot = telebot.TeleBot("1440450003:AAHYyU3wiTqCRwEY3Y57c3QLcnRjKH_47G4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
@@ -36,7 +36,7 @@ def grant(message):
         c = conn.cursor()
         #get the args
         args = str(message.text).split()
-        name = args[1]
+        name = args[1].replace('@', '')
         share = args[2]
         #create new entry in the USERS table
         sqlite_insert_with_param = "INSERT INTO USERS (NAME,SHARE_NB) VALUES (?, ?);"
@@ -48,11 +48,11 @@ def grant(message):
             bot.reply_to(message, "Wrong answer! Try again")
             exit()
         conn.commit()
-        resp = "Welcome " + name + "! You have" + str(share) + "shares!"
+        resp = "Welcome " + name + "! You have " + str(share) + " shares!"
         bot.reply_to(message, resp)
         #conn.close()
     else:
-        bot.reply_to(message, "You're not an admin!")
+        bot.reply_to(message, "🙅‍♂️ You're not an admin!")
 
 @bot.message_handler(commands=['addbounty'])
 def addbounty(message):
@@ -66,23 +66,27 @@ def addbounty(message):
             bounty_amount = args[2]
             bounty_time_limit =args[3]
             #get the date in a proper format
-            d, m, y = [int(x) for x in bounty_time_limit.split('/')] 
-            date = datetime.date(y,m,d)
+            """ d, m, y = [int(x) for x in bounty_time_limit.split('/')] 
+            date = datetime.date(y,m,d) """
+            time_now = datetime.datetime.now()
+            print(time_now) 
+            updated_time  = time_now + datetime.timedelta(minutes=30)
+            print(updated_time) 
             sqlite_insert_with_param = "INSERT INTO BOUNTY(NAME_BOUNTY,VALUE,TIME_LIMIT) VALUES (?, ?, ?);"
-            data_tuple = (bounty_name,bounty_amount,date)
+            data_tuple = (bounty_name,bounty_amount,updated_time)
             try:
                 c.execute(sqlite_insert_with_param, data_tuple)
             except sqlite3.Error as e:
                 print(e)
                 exit()
             conn.commit()
-            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + '!' + 'Join before ' + str(bounty_time_limit) + '!!!'
+            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + ' shares! ' + 'End in ' + str(bounty_time_limit) + ' minutes !!!'
             bot.reply_to(message, resp)
             #conn.close()
         except:
-            bot.reply_to(message, "Wrong answer! Try again")
+            bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
     else:
-        bot.reply_to(message, "You're not an admin!")
+        bot.reply_to(message, "🙅‍♂️ You're not an admin!")
 
 @bot.message_handler(commands=['endbounty'])
 def endbounty(message):
@@ -111,6 +115,8 @@ def endbounty(message):
                 exit()
 
             #Update the participating users
+            sqlite_insert_with_param = "UPDATE BOUNTY SET ACTIVE = FALSE WHERE ID_BOUNTY = ?;"
+            data_tuple = id
             try:
                 c.execute(sqlite_insert_with_param, data_tuple)
             except sqlite3.Error as e:
@@ -124,7 +130,7 @@ def endbounty(message):
         except:
             bot.reply_to(message, "Wrong answer! Try again")
     else:
-        bot.reply_to(message, "You're not an admin!")
+        bot.reply_to(message, "🙅‍♂️ You're not an admin!")
 
 @bot.message_handler(commands=['onthejob'])
 def onthejob(message):
@@ -137,29 +143,55 @@ def onthejob(message):
         username = message.from_user.username
         print(username)
         print(bounty_name)
+
+        #get the id of the bounty
+        sqlite_insert_with_param = "SELECT ID_BOUNTY FROM BOUNTY WHERE NAME_BOUNTY=?"
+        data_tuple = (bounty_name,)
+        try:
+            c.execute(sqlite_insert_with_param, data_tuple)
+            id_bounty = c.fetchone()
+        except:
+            bot.reply_to(message, "Didn't find the id of this bounty")
+            exit()
+            
+        #Check if the bounty is open
+        sqlite_insert_with_param = "SELECT ACTIVE FROM BOUNTY WHERE ID_BOUNTY=?"
+        data_tuple = id_bounty
+        try:
+            c.execute(sqlite_insert_with_param, data_tuple)
+            active = c.fetchone()
+        except:
+            bot.reply_to(message, "Couldn't check if the bounty is active")
+            exit()
+        if (not active[0]):
+            bot.reply_to(message,"The bounty is not active anymore!")
+            exit()
+
         #get the id of the user 
         sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?"
         data_tuple = (username,)
         c.execute(sqlite_insert_with_param, data_tuple)
         id_user = c.fetchone()
 
-        #get the id of the bounty
-        sqlite_insert_with_param = "SELECT ID_BOUNTY FROM BOUNTY WHERE NAME_BOUNTY=?"
-        data_tuple = (bounty_name,)
-        c.execute(sqlite_insert_with_param, data_tuple)
-        id_bounty = c.fetchone()
-
         #Get the max date of the bounty
         sqlite_insert_with_param = "SELECT TIME_LIMIT FROM BOUNTY WHERE ID_BOUNTY=?"
         data_tuple = id_bounty
-        c.execute(sqlite_insert_with_param, data_tuple)
-        time_limit = c.fetchone()[0]
+        try:
+            c.execute(sqlite_insert_with_param, data_tuple)
+            time_limit = c.fetchone()
+        except:
+            bot.reply_to(message, "Didn't find the time limit of this bounty")
+            exit()
 
         #Check the time limit
-
-        limit = datetime.datetime.strptime(time_limit,'%Y-%m-%d').date()
-        present = datetime.date.today()
-        if (limit>present):
+        
+        #limit = datetime.datetime.strptime(time_limit,'%Y-%m-%d').date()
+        present = datetime.datetime.today()
+        #print(time_limit[0])
+        #print(present)
+        time_max = datetime.datetime.strptime(time_limit[0], '%Y-%m-%d %H:%M:%S.%f')
+        #print(time_max>present)
+        if (time_max>present):
             sqlite_insert_with_param = "INSERT INTO PARTICIPATION(ID_USER,ID_BOUNTY) VALUES (?, ?);"
             data_tuple = (id_user[0],id_bounty[0])
             try:
@@ -168,7 +200,6 @@ def onthejob(message):
                 print(e)
                 exit()
             print("Added")
-            bot.reply_to(message, "Registered!")
             sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + 1 WHERE ID_USER = ?;"
             data_tuple = (id_user)
             try:
@@ -177,12 +208,13 @@ def onthejob(message):
                 print(e)
                 exit()
             print("Share Added")
+            bot.reply_to(message, "Registered! You will earn 1 share!")
         else:
             print("Impossible to register to this bounty (check the date)")
         #save and code
         conn.commit()
     except:
-        bot.reply_to(message, "Wrong answer! Try again")
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! 🤷‍♂️")
 
 @bot.message_handler(commands=['leaderboard'])
 def leaderboard(message):
@@ -198,15 +230,18 @@ def leaderboard(message):
         print(string)
         bot.reply_to(message, string)
     except:
-        bot.reply_to(message, "Wrong answer! Try again")
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 @bot.message_handler(commands=['highfive'])
 def highfive(message):
     try:
         args = str(message.text).split()
+        print("Test")
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
-        username_receiver = args[1]
+        print("Test")
+        username_receiver = args[1].replace('@', '')
+        print(username_receiver)
         #username_sender,username_receiver
         username_sender = message.from_user.username
         #get the id of the username_sender 
@@ -235,9 +270,11 @@ def highfive(message):
             bot.reply_to(message, response)
             conn.commit()
         else:
-            print("Fuck you")
+            bot.reply_to(message, "Fuck you 🖕 Don't highfive yourself!")
+            print("Fuck you 🖕")
     except:
-        bot.reply_to(message, "Wrong answer! Try again")
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
+
 
 """ if __name__ == "__main__":
     #grant("SensoryYard", 10)
