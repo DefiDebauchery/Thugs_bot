@@ -1,7 +1,7 @@
 import sqlite3,datetime, telebot
 
 admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
-bot = telebot.TeleBot("1440450003:AAHYyU3wiTqCRwEY3Y57c3QLcnRjKH_47G4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot("1314718679:AAFXwfK5fTfdwGseYVYqoBCW5jw9HE2poF4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
@@ -284,5 +284,9 @@ def highfive(message):
     #leaderboard()
     #highfive('SensoYard2','SensoYard3')
  """
-
-bot.polling()
+if __name__ == "__main__":
+    while(True):
+        try:
+            bot.infinity_polling()
+        except:
+            pass
