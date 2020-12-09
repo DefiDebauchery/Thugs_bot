@@ -29,15 +29,6 @@ CREATE TABLE PARTICIPATION(
 );
  """
 
-@bot.message_handler(commands=['help'])
-def help(message):
-    resp = """grant - Add a new user like this /grant telegram_handle nb_of shares (only admin)\n
-            addbounty - Add a new bounty like this /addbounty bounty_name bounty_amount bounty_time_limit (only admin)\n
-            endbounty - end a bounty like this /endbounty bounty_name (only admin)\n"""
-            onthejob - register for a bounty like this /onthejob bounty_name\n
-            leaderboard - show the leaderboard like this /leaderboard\n
-            highfive - send a highfive like this /highfive telegram_handle
-    bot.reply_to(message, resp)
 @bot.message_handler(commands=['grant'])
 def grant(message):
     if(message.from_user.username in admin_usernames):
@@ -177,6 +168,7 @@ def onthejob(message):
                 print(e)
                 exit()
             print("Added")
+            bot.reply_to(message, "Registered!")
             sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + 1 WHERE ID_USER = ?;"
             data_tuple = (id_user)
             try:
