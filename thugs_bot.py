@@ -236,10 +236,8 @@ def leaderboard(message):
 def highfive(message):
     try:
         args = str(message.text).split()
-        print("Test")
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
-        print("Test")
         username_receiver = args[1].replace('@', '')
         print(username_receiver)
         #username_sender,username_receiver
@@ -275,6 +273,21 @@ def highfive(message):
     except:
         bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
+@bot.message_handler(commands=['bountylist'])
+def bountylist(message):
+    try:   
+        conn = sqlite3.connect('thugsDB.db')
+        c = conn.cursor()
+        string = "Active bounties\n\n"
+        res = c.execute("select NAME_BOUNTY from BOUNTY WHERE ACTIVE = TRUE;")
+        #print(res.fetchall)
+        for row in res:
+            string = string + row[0] + "\n"
+        #conn.close()
+        print(string)
+        bot.reply_to(message, string)
+    except:
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 """ if __name__ == "__main__":
     #grant("SensoryYard", 10)
