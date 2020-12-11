@@ -47,6 +47,26 @@ def help_message(message):
 
     bot.reply_to(message, resp)
 
+@bot.message_handler(commands=['help'])
+def help_message(message):
+    resp = """
+Interacting with Bounty system:
+
+*User Commands*:
+`/leaderboard` |  Show the Leaderboard
+`/onthejob {bounty}` | Register for an active Bounty
+`/highfive {@User}` | Send a share to a User"""
+
+    if message.from_user.username in admin_usernames:
+        resp += """
+        
+*Admin Commands*:
+`/grant {@User} {shares}` | Grant shares
+`/addbounty {name} {share_value} {time_limit}` | Add a new Bounty
+`/endbounty {name}` | End a Bounty"""
+
+    bot.reply_to(message, resp, parse_mode='Markdown')
+
 @bot.message_handler(commands=['register'])
 def register(message):
     if (message.from_user.username == None):
