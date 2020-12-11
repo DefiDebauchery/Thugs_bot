@@ -1,7 +1,7 @@
 import sqlite3,datetime, telebot
 
 admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
-bot = telebot.TeleBot("1314718679:AAFXwfK5fTfdwGseYVYqoBCW5jw9HE2poF4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot("1440450003:AAHYyU3wiTqCRwEY3Y57c3QLcnRjKH_47G4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
@@ -29,18 +29,20 @@ CREATE TABLE PARTICIPATION(
 );
  """
 
-@bot.message_handler(commands=['grant'])
-def grant(message):
-    if(message.from_user.username in admin_usernames):
+@bot.message_handler(commands=['register'])
+def register(message):
+    if(True): #if(message.from_user.id in admin_usernames):
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         #get the args
-        args = str(message.text).split()
-        name = args[1].replace('@', '')
-        share = args[2]
+        #args = str(message.text).split()
+        id = message.from_user.id
+        share = 10
+        name = message.from_user.username
+
         #create new entry in the USERS table
-        sqlite_insert_with_param = "INSERT INTO USERS (NAME,SHARE_NB) VALUES (?, ?);"
-        data_tuple = (name,share)
+        sqlite_insert_with_param = "INSERT INTO USERS (ID_USER,NAME,SHARE_NB) VALUES (?, ?,?);"
+        data_tuple = (id,name,share)
         try:
             c.execute(sqlite_insert_with_param, data_tuple)
         except sqlite3.Error as e:
@@ -52,11 +54,11 @@ def grant(message):
         bot.reply_to(message, resp)
         #conn.close()
     else:
-        bot.reply_to(message, "🙅‍♂️ You're not an admin!")
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 @bot.message_handler(commands=['addbounty'])
 def addbounty(message):
-    if(message.from_user.username in admin_usernames):
+    if(True): #if(message.from_user.id in admin_usernames):
         try:
             conn = sqlite3.connect('thugsDB.db')
             c = conn.cursor()
@@ -70,7 +72,8 @@ def addbounty(message):
             date = datetime.date(y,m,d) """
             time_now = datetime.datetime.now()
             print(time_now) 
-            updated_time  = time_now + datetime.timedelta(minutes=30)
+            print(bounty_time_limit)
+            updated_time  = time_now + datetime.timedelta(minutes=int(bounty_time_limit)) #change the hardcoded value
             print(updated_time) 
             sqlite_insert_with_param = "INSERT INTO BOUNTY(NAME_BOUNTY,VALUE,TIME_LIMIT) VALUES (?, ?, ?);"
             data_tuple = (bounty_name,bounty_amount,updated_time)
@@ -90,15 +93,14 @@ def addbounty(message):
 
 @bot.message_handler(commands=['endbounty'])
 def endbounty(message):
-    if(message.from_user.username in admin_usernames):
+    if(True): #if(message.from_user.id in admin_usernames):
         try:
             conn = sqlite3.connect('thugsDB.db')
             c = conn.cursor()
-
             #get the args
             args = str(message.text).split()
             bounty_name = args[1]
-
+            print("bounty_name",bounty_name)
             #get the id
             sqlite_insert_with_param = "SELECT ID_BOUNTY FROM BOUNTY WHERE NAME_BOUNTY=?;"
             data_tuple = (bounty_name,)
@@ -140,8 +142,8 @@ def onthejob(message):
         #get the args
         args = str(message.text).split()
         bounty_name = args[1]
-        username = message.from_user.username
-        print(username)
+        id_user = message.from_user.id
+        print(id_user)
         print(bounty_name)
 
         #get the id of the bounty
@@ -168,8 +170,8 @@ def onthejob(message):
             exit()
 
         #get the id of the user 
-        sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?"
-        data_tuple = (username,)
+        sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE ID_USER=?"
+        data_tuple = (id_user,)
         c.execute(sqlite_insert_with_param, data_tuple)
         id_user = c.fetchone()
 
@@ -210,7 +212,8 @@ def onthejob(message):
             print("Share Added")
             bot.reply_to(message, "Registered! You will earn 1 share!")
         else:
-            print("Impossible to register to this bounty (check the date)")
+            bot.reply_to(message,"Impossible to register to this bounty (check the date)")
+            del_bounty(str(bounty_name))
         #save and code
         conn.commit()
     except:
@@ -218,7 +221,7 @@ def onthejob(message):
 
 @bot.message_handler(commands=['leaderboard'])
 def leaderboard(message):
-    try:   
+    try:    
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         string = "Leaderboard \n\n"
@@ -239,32 +242,42 @@ def highfive(message):
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         username_receiver = args[1].replace('@', '')
-        print(username_receiver)
+        print("username_receiver from text",username_receiver)
+        """
+        username_receiver = bot.get_chat_member(-445263888,username_receiver).user.id
+        id_user_receiver = bot.get_chat_member(-445263888,message.from_user.id).user.id
+        print("username_receiver from db",username_receiver)
+        print("id_user_receiver from db",username_receiver)
+        """
         #username_sender,username_receiver
-        username_sender = message.from_user.username
-        #get the id of the username_sender 
-        sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?;"
-        data_tuple = (username_sender,)
-        c.execute(sqlite_insert_with_param, data_tuple)
-        id_user_sender = c.fetchone()
+        id_user_sender = message.from_user.id
 
+        #get the id of the username_sender 
+        sqlite_insert_with_param = "SELECT NAME FROM USERS WHERE ID_USER=?;"
+        data_tuple = (id_user_sender,)
+        c.execute(sqlite_insert_with_param, data_tuple)
+        name_user_sender = c.fetchone()
+        print(name_user_sender)
+                
         #get the id of the username_receiver
         sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?;"
         data_tuple = (username_receiver,)
         c.execute(sqlite_insert_with_param, data_tuple)
         id_user_receiver = c.fetchone()
 
-        print(id_user_receiver[0])
-        if(id_user_receiver[0] != id_user_sender[0]):
+        print(id_user_receiver)
+        print(id_user_sender)
+        if(id_user_receiver[0] != id_user_sender):
+            print('TEST')
             sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + 1 WHERE ID_USER = ?;"
-            data_tuple = (id_user_receiver)
+            data_tuple = id_user_receiver
             try:
                 c.execute(sqlite_insert_with_param, data_tuple)
             except sqlite3.Error as e:
                 print(e)
                 exit()
             print("Share Added")
-            response = username_receiver + ' received a share from '+ username_sender +'🤑'
+            response = username_receiver + ' received a share from '+ name_user_sender[0] +'🤑'
             bot.reply_to(message, response)
             conn.commit()
         else:
@@ -275,7 +288,7 @@ def highfive(message):
 
 @bot.message_handler(commands=['bountylist'])
 def bountylist(message):
-    try:   
+    try: 
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         string = "Active bounties\n\n"
@@ -285,6 +298,7 @@ def bountylist(message):
             string = string + row[0] + "\n"
         #conn.close()
         print(string)
+        
         bot.reply_to(message, string)
     except:
         bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
@@ -297,9 +311,50 @@ def bountylist(message):
     #leaderboard()
     #highfive('SensoYard2','SensoYard3')
  """
+
+
+def del_bounty(bounty_name):
+    conn = sqlite3.connect('thugsDB.db')
+    c = conn.cursor()
+    #get the args
+    """    
+    args = str(message).split()
+    bounty_name = args[1] """
+    print("bounty_name",bounty_name)
+    #get the id
+    sqlite_insert_with_param = "SELECT ID_BOUNTY FROM BOUNTY WHERE NAME_BOUNTY=?;"
+    data_tuple = (bounty_name,)
+    c.execute(sqlite_insert_with_param, data_tuple)
+    id = c.fetchone()
+
+    #Update the bounty
+    sqlite_insert_with_param = "DELETE FROM PARTICIPATION WHERE ID_BOUNTY = ?;"
+    data_tuple = id
+    try:
+        c.execute(sqlite_insert_with_param, data_tuple)
+    except sqlite3.Error as e:
+        print(e)
+        exit()
+
+    #Update the participating users
+    sqlite_insert_with_param = "UPDATE BOUNTY SET ACTIVE = FALSE WHERE ID_BOUNTY = ?;"
+    data_tuple = id
+    try:
+        c.execute(sqlite_insert_with_param, data_tuple)
+    except sqlite3.Error as e:
+        print(e)
+        exit()
+    
+    #save and code
+    conn.commit()
+    #conn.close()
+
 if __name__ == "__main__":
+
+    """     
     while(True):
         try:
-            bot.infinity_polling()
+            
         except:
-            pass
+            pass """
+    bot.infinity_polling()
