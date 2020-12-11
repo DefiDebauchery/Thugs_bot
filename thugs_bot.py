@@ -28,24 +28,7 @@ CREATE TABLE PARTICIPATION(
    FOREIGN KEY(ID_BOUNTY) REFERENCES BOUNTY(ID_BOUNTY)
 );
  """
-@bot.message_handler(commands=['help'])
-def help_message(message):
-    resp = """
-    Interact with Bounty system with the following commands:\n
-    *User Commands*:\n
-    - `/register` |  Register in the Group (first time only) \n
-    - `/leaderboard` |  Show the Leaderboard\n
-    - `/onthejob {bounty}` | Register for an active Bounty\n
-    - `/highfive {@User}` | Send a share to an User\n"""
 
-    if message.from_user.username in admin_usernames:
-        resp += """
-        *Admin Commands*:\n
-        - `/grant {@User} {shares}` | Grant shares\n
-        - `/addbounty {name} {share_value} {time_limit}` | Add a new Bounty\n
-        - `/endbounty {name}` | End a Bounty\n"""
-
-    bot.reply_to(message, resp)
 
 @bot.message_handler(commands=['help'])
 def help_message(message):
@@ -53,9 +36,11 @@ def help_message(message):
 Interacting with Bounty system:
 
 *User Commands*:
+`/register` |  Register in the Group (only the first time)
 `/leaderboard` |  Show the Leaderboard
 `/onthejob {bounty}` | Register for an active Bounty
-`/highfive {@User}` | Send a share to a User"""
+`/highfive {@User}` | Send a share to a User
+`/bountylist` | List the active bounties"""
 
     if message.from_user.username in admin_usernames:
         resp += """
@@ -110,8 +95,8 @@ def addbounty(message):
                 bounty_amount = int(args[2])
             except:
                 bot.reply_to(message, "Use Integers!")
-                        try:
-                bounty_amount = int(args[3])
+            try:
+                bounty_time_limit = int(args[3])
             except:
                 bot.reply_to(message, "Use Integers!")
             #get the date in a proper format
@@ -274,7 +259,8 @@ def leaderboard(message):
     try:    
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
-        string = "*Amount Invested by the team* : {} Creds\n\n".format(creds_invested())
+        string = "*Amount Invested by the team* : {0} Creds\n\n".format(creds_invested())
+        string = string +"*Amount Available now in the fund* :SOON\n\n"
         string = string +"*Leaderboard* \n\n"
         res = c.execute("select name,share_nb from users ORDER BY share_nb DESC;")
         #print(res.fetchall)
@@ -284,7 +270,7 @@ def leaderboard(message):
         print(string)
         bot.reply_to(message, string)
     except:
-        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again",parse_mode='Markdown')
 
 @bot.message_handler(commands=['highfive'])
 def highfive(message):
