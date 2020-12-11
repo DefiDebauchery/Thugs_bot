@@ -14,7 +14,7 @@ CREATE TABLE BOUNTY(
 
 
 CREATE TABLE USERS(
-   ID_USER INTEGER PRIMARY KEY AUTOINCREMENT,
+   ID_USER INTEGER PRIMARY KEY,
    NAME    CHAR(50) UNIQUE NOT NULL,
    SHARE_NB INTEGER    NOT NULL
 );
@@ -348,6 +348,57 @@ def del_bounty(bounty_name):
     #save and code
     conn.commit()
     #conn.close()
+
+@bot.message_handler(commands=['grant'])
+def grant(message):
+    try:
+        args = str(message.text).split()
+        conn = sqlite3.connect('thugsDB.db')
+        c = conn.cursor()
+        username_receiver = args[1].replace('@', '')
+        amount = int(args[2])
+        print("username_receiver from text",username_receiver)
+        """
+        username_receiver = bot.get_chat_member(-445263888,username_receiver).user.id
+        id_user_receiver = bot.get_chat_member(-445263888,message.from_user.id).user.id
+        print("username_receiver from db",username_receiver)
+        print("id_user_receiver from db",username_receiver)
+        """
+        #username_sender,username_receiver
+        id_user_sender = message.from_user.id
+
+        #get the id of the username_sender 
+        sqlite_insert_with_param = "SELECT NAME FROM USERS WHERE ID_USER=?;"
+        data_tuple = (id_user_sender,)
+        c.execute(sqlite_insert_with_param, data_tuple)
+        name_user_sender = c.fetchone()
+        print(name_user_sender)
+                
+        #get the id of the username_receiver
+        sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?;"
+        data_tuple = (username_receiver,)
+        c.execute(sqlite_insert_with_param, data_tuple)
+        id_user_receiver = c.fetchone()
+
+        print(id_user_receiver)
+        print(id_user_sender)
+        if(id_user_receiver[0] != id_user_sender):
+            print('TEST')
+            sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + ? WHERE ID_USER = ?;"
+            data_tuple = (amount,id_user_receiver[0])
+            try:
+                c.execute(sqlite_insert_with_param, data_tuple)
+            except sqlite3.Error as e:
+                print(e)
+                exit()
+            print("Share Added")
+            response = username_receiver + ' received' + amount + 'shares from '+ name_user_sender[0] +'🤑'
+            bot.reply_to(message, response)
+            conn.commit()
+        else:
+            bot.reply_to(message, "Fuck you 🖕 Don't give shares to yourself!")
+    except:
+        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 if __name__ == "__main__":
 
