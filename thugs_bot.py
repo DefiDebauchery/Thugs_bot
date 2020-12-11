@@ -1,7 +1,7 @@
-import sqlite3,datetime, telebot
+import sqlite3,datetime, telebot, os
 
 admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
-bot = telebot.TeleBot("", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot(os.getenv('API_KEY_TG'), parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
