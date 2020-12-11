@@ -32,21 +32,22 @@ CREATE TABLE PARTICIPATION(
 @bot.message_handler(commands=['help'])
 def help_message(message):
     resp = """
-    Interact with Bounty system with the following commands:\n
-    \n
-    **User Commands**:\n
-    - `/leaderboard` |  Show the Leaderboard\n
-    - `/onthejob {bounty}` | Register for an active Bounty\n
-    - `/highfive {@User}` | Send a share to a User\n"""
+Interacting with Bounty system:
+
+*User Commands*:
+`/leaderboard` |  Show the Leaderboard
+`/onthejob {bounty}` | Register for an active Bounty
+`/highfive {@User}` | Send a share to a User"""
 
     if message.from_user.username in admin_usernames:
         resp += """
-        **Admin Commands**:\n
-        - `/grant {@User} {shares}` | Grant shares\n
-        - `/addbounty {name} {share_value} {time_limit}` | Add a new Bounty\n
-        - `/endbounty {name}` | End a Bounty\n"""
+        
+*Admin Commands*:
+`/grant {@User} {shares}` | Grant shares
+`/addbounty {name} {share_value} {time_limit}` | Add a new Bounty
+`/endbounty {name}` | End a Bounty"""
 
-    bot.reply_to(message, resp)
+    bot.reply_to(message, resp, parse_mode='Markdown')
 
 @bot.message_handler(commands=['register'])
 def register(message):
