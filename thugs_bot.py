@@ -1,11 +1,11 @@
 import sqlite3,datetime, telebot
 
 admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
-bot = telebot.TeleBot("1440450003:AAHYyU3wiTqCRwEY3Y57c3QLcnRjKH_47G4", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot("", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
-   ID_BOUNTY INTEGER PRIMARY KEY     AUTOINCREMENT,
+   ID_BOUNTY INTEGER PRIMARY KEY     AUTOINCREMENT,Z
    NAME_BOUNTY    CHAR(50) UNIQUE      NOT NULL,	
    VALUE          INTEGER            NOT NULL,
    TIME_LIMIT     DATE           NOT NULL,
@@ -28,6 +28,24 @@ CREATE TABLE PARTICIPATION(
    FOREIGN KEY(ID_BOUNTY) REFERENCES BOUNTY(ID_BOUNTY)
 );
  """
+@bot.message_handler(commands=['help'])
+def help_message(message):
+    resp = """
+    Interact with Bounty system with the following commands:\n
+    *User Commands*:\n
+    - `/register` |  Register in the Group (first time only) \n
+    - `/leaderboard` |  Show the Leaderboard\n
+    - `/onthejob {bounty}` | Register for an active Bounty\n
+    - `/highfive {@User}` | Send a share to an User\n"""
+
+    if message.from_user.username in admin_usernames:
+        resp += """
+        *Admin Commands*:\n
+        - `/grant {@User} {shares}` | Grant shares\n
+        - `/addbounty {name} {share_value} {time_limit}` | Add a new Bounty\n
+        - `/endbounty {name}` | End a Bounty\n"""
+
+    bot.reply_to(message, resp)
 
 @bot.message_handler(commands=['help'])
 def help_message(message):
@@ -51,7 +69,10 @@ Interacting with Bounty system:
 
 @bot.message_handler(commands=['register'])
 def register(message):
-    if(True): #if(message.from_user.id in admin_usernames):
+    if (message.from_user.username == None):
+        bot.reply_to(message, "🙅‍♂️ You don't have an @")
+        exit()
+    if(message.from_user.username in admin_usernames):
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         #get the args
@@ -78,15 +99,21 @@ def register(message):
 
 @bot.message_handler(commands=['addbounty'])
 def addbounty(message):
-    if(True): #if(message.from_user.id in admin_usernames):
+    if(message.from_user.username in admin_usernames):
         try:
             conn = sqlite3.connect('thugsDB.db')
             c = conn.cursor()
             #get the args
             args = str(message.text).split()
             bounty_name = args[1]
-            bounty_amount = args[2]
-            bounty_time_limit =args[3]
+            try:
+                bounty_amount = int(args[2])
+            except:
+                bot.reply_to(message, "Use Integers!")
+                        try:
+                bounty_amount = int(args[3])
+            except:
+                bot.reply_to(message, "Use Integers!")
             #get the date in a proper format
             """ d, m, y = [int(x) for x in bounty_time_limit.split('/')] 
             date = datetime.date(y,m,d) """
@@ -113,7 +140,7 @@ def addbounty(message):
 
 @bot.message_handler(commands=['endbounty'])
 def endbounty(message):
-    if(True): #if(message.from_user.id in admin_usernames):
+    if(message.from_user.username in admin_usernames):
         try:
             conn = sqlite3.connect('thugsDB.db')
             c = conn.cursor()
@@ -156,6 +183,9 @@ def endbounty(message):
 
 @bot.message_handler(commands=['onthejob'])
 def onthejob(message):
+    if (message.from_user.username == None):
+        bot.reply_to(message, "🙅‍♂️ You don't have an @")
+        exit()
     try:
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
@@ -244,7 +274,8 @@ def leaderboard(message):
     try:    
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
-        string = "Leaderboard \n\n"
+        string = "*Amount Invested by the team* : {} Creds\n\n".format(creds_invested())
+        string = string +"*Leaderboard* \n\n"
         res = c.execute("select name,share_nb from users ORDER BY share_nb DESC;")
         #print(res.fetchall)
         for row in res:
@@ -257,12 +288,19 @@ def leaderboard(message):
 
 @bot.message_handler(commands=['highfive'])
 def highfive(message):
+    if (message.from_user.username == None):
+        bot.reply_to(message, "🙅‍♂️ You don't have an @")
+        exit()
     try:
         args = str(message.text).split()
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         username_receiver = args[1].replace('@', '')
+        #username_receiver = message.entities[1]
         print("username_receiver from text",username_receiver)
+        #parsed_user = message.parse_entity(username_receiver)
+        #username_receiver = message.caption_entities[0].user.id
+        #print("username_receiver from text",parsed_user)
         """
         username_receiver = bot.get_chat_member(-445263888,username_receiver).user.id
         id_user_receiver = bot.get_chat_member(-445263888,message.from_user.id).user.id
@@ -371,54 +409,73 @@ def del_bounty(bounty_name):
 
 @bot.message_handler(commands=['grant'])
 def grant(message):
-    try:
-        args = str(message.text).split()
-        conn = sqlite3.connect('thugsDB.db')
-        c = conn.cursor()
-        username_receiver = args[1].replace('@', '')
-        amount = int(args[2])
-        print("username_receiver from text",username_receiver)
-        """
-        username_receiver = bot.get_chat_member(-445263888,username_receiver).user.id
-        id_user_receiver = bot.get_chat_member(-445263888,message.from_user.id).user.id
-        print("username_receiver from db",username_receiver)
-        print("id_user_receiver from db",username_receiver)
-        """
-        #username_sender,username_receiver
-        id_user_sender = message.from_user.id
+    if (message.from_user.username == None):
+        bot.reply_to(message, "🙅‍♂️ You don't have an @")
+        exit()
+    if(message.from_user.username in admin_usernames):
+        try:
+            args = str(message.text).split()
+            conn = sqlite3.connect('thugsDB.db')
+            c = conn.cursor()
+            username_receiver = args[1].replace('@', '')
+            amount = int(args[2])
+            print(amount    )
+            print("username_receiver from text",username_receiver)
+            """
+            username_receiver = bot.get_chat_member(-445263888,username_receiver).user.id
+            id_user_receiver = bot.get_chat_member(-445263888,message.from_user.id).user.id
+            print("username_receiver from db",username_receiver)
+            print("id_user_receiver from db",username_receiver)
+            """
+            #username_sender,username_receiver
+            id_user_sender = message.from_user.id
 
-        #get the id of the username_sender 
-        sqlite_insert_with_param = "SELECT NAME FROM USERS WHERE ID_USER=?;"
-        data_tuple = (id_user_sender,)
-        c.execute(sqlite_insert_with_param, data_tuple)
-        name_user_sender = c.fetchone()
-        print(name_user_sender)
-                
-        #get the id of the username_receiver
-        sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?;"
-        data_tuple = (username_receiver,)
-        c.execute(sqlite_insert_with_param, data_tuple)
-        id_user_receiver = c.fetchone()
+            #get the id of the username_sender 
+            sqlite_insert_with_param = "SELECT NAME FROM USERS WHERE ID_USER=?;"
+            data_tuple = (id_user_sender,)
+            c.execute(sqlite_insert_with_param, data_tuple)
+            name_user_sender = c.fetchone()
+            print(name_user_sender)
+                    
+            #get the id of the username_receiver
+            sqlite_insert_with_param = "SELECT ID_USER FROM USERS WHERE NAME=?;"
+            data_tuple = (username_receiver,)
+            c.execute(sqlite_insert_with_param, data_tuple)
+            id_user_receiver = c.fetchone()
 
-        print(id_user_receiver)
-        print(id_user_sender)
-        if(id_user_receiver[0] != id_user_sender):
-            print('TEST')
-            sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + ? WHERE ID_USER = ?;"
-            data_tuple = (amount,id_user_receiver[0])
-            try:
-                c.execute(sqlite_insert_with_param, data_tuple)
-            except sqlite3.Error as e:
-                print(e)
-                exit()
-            print("Share Added")
-            response = username_receiver + ' received' + amount + 'shares from '+ name_user_sender[0] +'🤑'
-            bot.reply_to(message, response)
-            conn.commit()
-        else:
-            bot.reply_to(message, "Fuck you 🖕 Don't give shares to yourself!")
-    except:
-        bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
+            print(id_user_receiver)
+            print(id_user_sender)
+            if(id_user_receiver[0] != id_user_sender):
+                print('TEST')
+                id = id_user_receiver[0]
+                print(id)
+                sqlite_insert_with_param = "UPDATE USERS SET SHARE_NB = SHARE_NB + ? WHERE ID_USER = ?;"
+                data_tuple = (amount,id)
+                try:
+                    c.execute(sqlite_insert_with_param, data_tuple)
+                except sqlite3.Error as e:
+                    print(e)
+                    exit()
+                print("Share Added")
+                print(name_user_sender[0])
+                response = username_receiver + " received " + str(amount) + " shares from "+ name_user_sender[0] +'🤑'
+                bot.reply_to(message, response  )
+                conn.commit()
+            else:
+                bot.reply_to(message, "Fuck you 🖕 Don't give shares to yourself!")
+        except:
+            bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
+    else:
+        bot.reply_to(message, "🙅‍♂️ You're not an admin!")
+
+
+def creds_invested():
+    conn = sqlite3.connect('thugsDB.db')
+    c = conn.cursor()
+    c.execute("select sum(value) from bounty;")
+    result = c.fetchone()
+    print(result[0])
+    return(result[0])
 
 if __name__ == "__main__":
 
