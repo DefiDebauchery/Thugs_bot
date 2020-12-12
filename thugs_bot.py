@@ -1,7 +1,7 @@
-import sqlite3,datetime, telebot
+import sqlite3,datetime, telebot, os
 
 admin_usernames =['Hammerloaf','mikeythug1','SensoryYard']
-bot = telebot.TeleBot("", parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
+bot = telebot.TeleBot(os.getenv('API_KEY_TG'), parse_mode='MARKDOWN') # You can set parse_mode by default. HTML or MARKDOWN
 
 """ 
 CREATE TABLE BOUNTY(
@@ -57,7 +57,7 @@ def register(message):
     if (message.from_user.username == None):
         bot.reply_to(message, "🙅‍♂️ You don't have an @")
         exit()
-    if(message.from_user.username in admin_usernames):
+    try:
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         #get the args
@@ -79,7 +79,7 @@ def register(message):
         resp = "Welcome " + name + "! You have " + str(share) + " shares!"
         bot.reply_to(message, resp)
         #conn.close()
-    else:
+    except:
         bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 @bot.message_handler(commands=['addbounty'])
@@ -115,7 +115,7 @@ def addbounty(message):
                 print(e)
                 exit()
             conn.commit()
-            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + ' shares! ' + 'End in ' + str(bounty_time_limit) + ' minutes !!!'
+            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + ' CREDS! ' + 'End in ' + str(bounty_time_limit) + ' minutes !!!'
             bot.reply_to(message, resp)
             #conn.close()
         except:
@@ -245,7 +245,7 @@ def onthejob(message):
                 print(e)
                 exit()
             print("Share Added")
-            bot.reply_to(message, "Registered! You will earn 1 share!")
+            bot.reply_to(message, "Registered! You earned 1 share!")
         else:
             bot.reply_to(message,"Impossible to register to this bounty (check the date)")
             del_bounty(str(bounty_name))
