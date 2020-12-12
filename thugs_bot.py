@@ -115,7 +115,7 @@ def addbounty(message):
                 print(e)
                 exit()
             conn.commit()
-            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + ' shares! ' + 'End in ' + str(bounty_time_limit) + ' minutes !!!'
+            resp = 'The bounty "' + bounty_name + '" is created with a budget of ' + str(bounty_amount) + ' CREDS! ' + 'End in ' + str(bounty_time_limit) + ' minutes !!!'
             bot.reply_to(message, resp)
             #conn.close()
         except:
@@ -245,7 +245,7 @@ def onthejob(message):
                 print(e)
                 exit()
             print("Share Added")
-            bot.reply_to(message, "Registered! You will earn 1 share!")
+            bot.reply_to(message, "Registered! You earned 1 share!")
         else:
             bot.reply_to(message,"Impossible to register to this bounty (check the date)")
             del_bounty(str(bounty_name))
