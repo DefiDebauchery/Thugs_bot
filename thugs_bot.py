@@ -57,7 +57,7 @@ def register(message):
     if (message.from_user.username == None):
         bot.reply_to(message, "🙅‍♂️ You don't have an @")
         exit()
-    if(message.from_user.username in admin_usernames):
+    try:
         conn = sqlite3.connect('thugsDB.db')
         c = conn.cursor()
         #get the args
@@ -79,7 +79,7 @@ def register(message):
         resp = "Welcome " + name + "! You have " + str(share) + " shares!"
         bot.reply_to(message, resp)
         #conn.close()
-    else:
+    except:
         bot.reply_to(message, "🙅‍♂️ Wrong answer! Try again")
 
 @bot.message_handler(commands=['addbounty'])
