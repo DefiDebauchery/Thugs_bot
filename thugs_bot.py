@@ -30,7 +30,7 @@ strings = {
     'unknown_user'      : "Yo, who the fuck are you? Did you forget to /register?",
     'unknown_target'    : "Sorry, I don't know who that is!",
     'self_grant'        : "🖕 Fuck you - don't give shares to yourself!",
-    'self_bump'         : "🖕 Fuck you - you can't bump yourself!",
+    'self_bump'         : "🖕 Fuck you - you can't fistbump yourself!",
     'participating'     : "Hey asshole, did you forget? You're already part of this bounty!",
     'not_participating' : "Did you bump your head? You're not even part of this bounty!",
     'bounty_value_error': "Could not add the bounty: Share value must be a positive number!",
@@ -178,7 +178,7 @@ def register(message):
 
     add_log(user_id, user_id, 'register', shares)
 
-    resp = f"Welcome {username}! You have {str(shares)} shares!"
+    resp = f"Welcome {username}! We've granted you {str(shares)} shares!"
     bot.reply_to(message, resp)
 
 @bot.message_handler(commands=['addbounty'])
@@ -442,14 +442,6 @@ def bump(message: telebot.types.Message):
         return
     except sqlite3.Error as e:
         print('bump general', e)
-        return bot.reply_to(message, strings['general_error'])
-
-    sql = "INSERT INTO bumps (from_id, to_id, at) VALUES (?,?,?)"
-    data_tuple = (message.from_user.id, target_user['telegram_id'], now())
-    try:
-        c.execute(sql, data_tuple)
-    except sqlite3.Error as e:
-        print('bump', e)
         return bot.reply_to(message, strings['general_error'])
 
     db.commit()
