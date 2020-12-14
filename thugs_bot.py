@@ -14,8 +14,8 @@ if (API_TOKEN := os.getenv('API_KEY_TG')) is None:
 
 runtime = {
     'users'        : defaultdict(dict),
-    'bounties'     : defaultdict(list),
-    'participation': defaultdict(dict),
+    'bounties'     : defaultdict(dict),
+    'participation': defaultdict(list),
     'settings'     : defaultdict(dict)
 }
 
@@ -32,11 +32,12 @@ strings = {
     'self_grant'        : "🖕 Fuck you - don't give shares to yourself!",
     'self_bump'         : "🖕 Fuck you - you can't bump yourself!",
     'participating'     : "Hey asshole, did you forget? You're already part of this bounty!",
+    'not_participating' : "Did you bump your head? You're not even part of this bounty!",
     'bounty_value_error': "Could not add the bounty: Share value must be a positive number!",
     'bounty_limit_error': "Could not add the bounty: Provide a positive number of minutes!"
 }
 
-admin_usernames = ['Hammerloaf', 'mikeythug1', 'SensoryYard']
+admin_usernames = ['Hammerloaf', 'mikeythug1', 'SensoryYard', '@DefiDebauchery']
 dev_usernames = ['SensoryYard', '@DefiDebauchery']
 bot = telebot.TeleBot(API_TOKEN, parse_mode='Markdown')
 
@@ -111,6 +112,9 @@ def parse_int(val):
     return val
 
 def parse_mention(message: telebot.types.Message):
+    if len(message.entities) < 2:
+        return None
+
     entity = message.entities[1]
 
     if entity.type == 'text_mention':
@@ -298,6 +302,8 @@ def onthejob(message):
     if (bounty_participation := runtime['participation'][bounty['bounty_id']]) and user_id in bounty_participation:
         return bot.reply_to(message, strings['participating'])
 
+    print(bounty_participation)
+
     c = db.cursor()
     sqlite_insert_with_param = "INSERT INTO participation(telegram_id, bounty_id) VALUES (?, ?);"
     data_tuple = (user_id, bounty['bounty_id'])
@@ -324,6 +330,64 @@ def onthejob(message):
 
     add_log(user_id, user_id, 'onthejob', shares)
     return bot.reply_to(message, f"Thanks for taking on `{bounty['name']}`! You earned {shares} share(s)!")
+
+@bot.message_handler(commands=['abandon'])
+def abandon(message):
+    # get the args
+    args = str(message.text).split()
+    bounty_name = ' '.join(args[1:])  # Don't require quotes since it's a single argument
+    user_id = message.from_user.id
+    shares = runtime['settings'].get('otj_shares', fallback['otj_shares'])
+
+    if (user := runtime['users'].get(user_id)) is None:
+        return bot.reply_to(message, strings['unknown_user'])
+
+    if bounty_id := parse_int(bounty_name):
+        if (bounty := runtime['bounties'].get(bounty_id, None)) is None:
+            return bot.reply_to(message, f"Bounty ID {bounty_id} does not exist!")
+    else:
+        if (bounty := find_bounty_by_name(bounty_name)) is None:
+            return bot.reply_to(message, f"There is no open bounty named `{bounty_name}`!")
+
+    if not bounty['is_active']:
+        return bot.reply_to(message, 'This bounty has ended!')
+
+    # If we get this far, the bounty is still active and we'll disable it
+    if bounty['endtime'] < now():
+        remove_bounty(bounty)
+        return bot.reply_to(message, 'This bounty has ended!')
+
+    bounty_participation = runtime['participation'][bounty['bounty_id']]
+    if user_id not in bounty_participation:
+        return bot.reply_to(message, strings['not_participating'])
+
+    c = db.cursor()
+    sqlite_insert_with_param = "DELETE FROM participation WHERE telegram_id = ? AND bounty_id = ?"
+    data_tuple = (user_id, bounty['bounty_id'])
+    try:
+        c.execute(sqlite_insert_with_param, data_tuple)
+    except sqlite3.IntegrityError as e:
+        print('abandon', e)
+        return
+    except sqlite3.Error as e:
+        print('abandon general', e)
+        return
+
+    sqlite_insert_with_param = "UPDATE users SET shares = shares - ? WHERE telegram_id = ?;"
+    data_tuple = (shares, user_id)
+    try:
+        c.execute(sqlite_insert_with_param, data_tuple)
+    except sqlite3.Error as e:
+        print(e)
+        return
+
+    db.commit()
+    user['shares'] -= shares
+    bounty_participation.remove(user_id)
+
+    add_log(user_id, user_id, 'abandon', -shares)
+    return bot.reply_to(message, f"A real G knows when they're in over their head. "
+                                 f"You've left the bounty `{bounty['name']}` and the shares have been removed.")
 
 @bot.message_handler(commands=['leaderboard'])
 def leaderboard(message):
