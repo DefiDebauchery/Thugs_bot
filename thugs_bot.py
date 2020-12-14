@@ -248,9 +248,8 @@ def endbounty(message):
     # get the args
     args = shlex.split(unidecode(message.text))
     bounty_name = args[1]
-    bounty_id = 0
 
-    bounty_id = parse_int(bounty_id)
+    bounty_id = parse_int(bounty_name)
 
     if bounty_id:
         if (bounty := runtime['bounties'].get(bounty_id)) is None:
