@@ -33,6 +33,7 @@ strings = {
     'self_bump'         : "🖕 Fuck you - you can't fistbump yourself!",
     'participating'     : "Hey asshole, did you forget? You're already part of this bounty!",
     'not_participating' : "Did you bump your head? You're not even part of this bounty!",
+    'bounty_full'       : "Sorry, we have all the muscle we need for this job.",
     'bounty_value_error': "Could not add the bounty: Share value must be a positive number!",
     'bounty_limit_error': "Could not add the bounty: Provide a positive number of minutes!"
 }
@@ -58,7 +59,7 @@ def num_arguments(required=0):
             if len(shlex.split(unidecode(message.text))) == required + 1:
                 return f(*args, **kwargs)
             else:
-                bot.reply_to(message, f"🙅‍♂️ This command requires exactly {required} arguments! "
+                bot.reply_to(message, f"🙅‍♂️ This command requires exactly {pluralize(required, 'argument')}! "
                                       f"Wrap quotes around text with spaces!")
 
         return wrapper
@@ -125,6 +126,9 @@ def parse_mention(message: telebot.types.Message):
 def parse_user(user: telebot.types.User):
     return user.username or user.first_name
 
+def pluralize(amount, string):
+    return f"{amount} {string}" + ('s' if amount != 1 else '')
+
 @bot.message_handler(commands=['help'])
 def help_message(message):
     resp = """
@@ -145,6 +149,8 @@ Interacting with the Bounty system:
 `/addbounty {"name"} {cred_value} {time_limit}` | Add a new Bounty
 `/endbounty {"name"|id}` | End a Bounty
 `/cashout {@User} {shares}` | Redeem Shares for User
+`/audit {id}` | Show stats for Bounty
+`/showlog {@User}` | Show Balance changes
 """
 
     bot.reply_to(message, resp, parse_mode='Markdown')
@@ -159,10 +165,11 @@ def register(message):
         return bot.reply_to(message, f"{username}, you're already registered!")
 
     shares = runtime['settings'].get('initial_shares', fallback['initial_shares'])
+    created_at = now()
 
     # create new entry in the users table
-    sqlite_insert_with_param = "INSERT INTO users (telegram_id,username,shares) VALUES (?,?,?);"
-    data_tuple = (user_id, username, shares)
+    sqlite_insert_with_param = "INSERT INTO users (telegram_id, username, shares, created_at) VALUES (?,?,?,?);"
+    data_tuple = (user_id, username, shares, created_at)
     try:
         c = db.cursor()
         c.execute(sqlite_insert_with_param, data_tuple)
@@ -174,11 +181,12 @@ def register(message):
         print('register', e)
         return bot.reply_to(message, strings['general_error'])
 
-    runtime['users'][user_id] = {'telegram_id': user_id, 'username': username, 'shares': shares}
+    runtime['users'][user_id] = {'telegram_id': user_id, 'username': username, 'shares': shares,
+                                 'created_at' : created_at}
 
-    add_log(user_id, user_id, 'register', shares)
+    add_log(user_id, user_id, 'reg', shares)
 
-    resp = f"Welcome {username}! We've granted you {str(shares)} shares!"
+    resp = f"Welcome {username}! We've granted you {pluralize(shares, 'share')}!"
     bot.reply_to(message, resp)
 
 @bot.message_handler(commands=['addbounty'])
@@ -200,28 +208,12 @@ def addbounty(message):
     if not (bounty_time_limit := parse_int(args[3])) or bounty_time_limit < 1:
         return bot.reply_to(message, strings['bounty_limit_error'])
 
-    # try:
-    #     bounty_amount = int(args[2])
-    #     if bounty_amount < 1:
-    #         raise ValueError
-    # except ValueError:
-    #     return bot.reply_to(message, strings['bounty_value_error'])
-    #
-    # try:
-    #     bounty_time_limit = int(args[3])
-    #     if bounty_time_limit < 1:
-    #         raise ValueError
-    # except ValueError:
-    #     bot.reply_to(message, "Could not add the bounty: Provide a positive number of minutes!")
-    #     return
-    # parse the date in unix timestamp
-    """ d, m, y = [int(x) for x in bounty_time_limit.split('/')] 
-    date = datetime.date(y,m,d) """
-    updated_time = datetime.datetime.now() + datetime.timedelta(minutes=bounty_time_limit)
-    updated_time = int(updated_time.timestamp())
+    end_time = datetime.datetime.now() + datetime.timedelta(minutes=bounty_time_limit)
+    end_time = int(end_time.timestamp())
+    created_at = now()
 
-    sqlite_insert_with_param = "INSERT INTO bounties(name, worth, endtime) VALUES (?, ?, ?);"
-    data_tuple = (bounty_name, bounty_amount, updated_time)
+    sqlite_insert_with_param = "INSERT INTO bounties(name, worth, endtime, created_at) VALUES (?, ?, ?, ?);"
+    data_tuple = (bounty_name, bounty_amount, end_time, created_at)
     try:
         c = db.cursor()
         c.execute(sqlite_insert_with_param, data_tuple)
@@ -235,11 +227,16 @@ def addbounty(message):
         return bot.reply_to(message, strings['general_error'])
 
     runtime['bounties'][bounty_id] = {'bounty_id': bounty_id, 'name': bounty_name, 'worth': bounty_amount,
-                                      'endtime'  : updated_time, 'is_active': True}
+                                      'endtime'  : end_time, 'is_active': True, 'created_at': created_at}
 
-    resp = f"Bounty {bounty_id}, `{bounty_name}`, is created with a budget of {str(bounty_amount)} shares! " \
-           f"Signup ends in {str(bounty_time_limit)} minutes!"
-    bot.reply_to(message, resp)
+    response = f"""
+*NEW BOUNTY!*
+
+ID {bounty_id}: `{bounty_name}` now has {pluralize(bounty_amount, 'open spot')} for willing muscle.
+This bounty is open for {display_time(bounty_time_limit * 60)}. GO GO GO!
+"""
+
+    bot.send_message(message.chat.id, response)
 
 @bot.message_handler(commands=['endbounty'])
 @admin_command
@@ -266,10 +263,83 @@ def endbounty(message):
         print('endbounty', e)
         return bot.reply_to(message, strings['general_error'])
 
-    runtime['participation'].pop(bounty_id, None)
     runtime['bounties'][bounty_id]['is_active'] = False
+    runtime['bounties'][bounty_id]['endtime'] = now()
 
     bot.reply_to(message, "This bounty is ended!")
+
+@bot.message_handler(commands=['audit'])
+@admin_command
+@num_arguments(1)
+def audit(message):
+    bounty_id = parse_int(message.text.split()[1])
+
+    if bounty_id:
+        if (bounty := runtime['bounties'].get(bounty_id)) is None:
+            return bot.reply_to(message, f"Bounty ID {bounty_id} does not exist!")
+    else:
+        return bot.reply_to(message, f"I don't know anything about Bounty ID {bounty_id}.")
+
+    running_time = f"Ends in {display_time(bounty['endtime'] - now())}" if (bounty['is_active'] and bounty['endtime'] > now()) \
+        else f"Ran for {display_time(bounty['endtime'] - bounty['created_at'])}"
+
+    participation_list = [runtime['users'][k]['username'] for k in runtime['participation'][bounty_id] if
+                          k in runtime['users']]
+
+    response = f"""
+Bounty {bounty['bounty_id']}:  `{bounty['name']}`
+Created {str(datetime.datetime.fromtimestamp(bounty['created_at']))}
+{running_time}
+
+Muscle ({len(participation_list)}/{bounty['worth']}): {', '.join(participation_list)}
+"""
+
+    bot.reply_to(message, response)
+
+@bot.message_handler(commands=['showlog'])
+@admin_command
+@num_arguments(1)
+def showlog(message):
+    username = parse_mention(message)
+
+    if (target_user := find_user_by_name(username)) is None:
+        return bot.reply_to(message, strings['unknown_target'])
+
+    query = "SELECT IIF(from_id = to_id, '<Self>', u.username) AS username, " \
+            "IIF(subject, action || ' (' || subject || ')', action) as action, amount, at FROM log " \
+            "INNER JOIN users u ON u.telegram_id = from_id " \
+            "WHERE to_id = ? ORDER BY at DESC LIMIT 15"
+
+    cursor = db.cursor()
+    cursor.execute(query, (target_user['telegram_id'],))
+
+    results = [dict(row) for row in cursor.fetchall()]
+
+    if not len(results):
+        return bot.reply_to(message, f"No logs for this user")
+
+    maxlength = {
+        'username': len(max(results, key=lambda x: len(x['username']))['username']),
+        'action': len(max(results, key=lambda x: len(x['action']))['action']),
+        'amount': len(str(max(results, key=lambda x: len(str(x['amount'])))['amount']))
+    }
+
+    table = f"{'From'.ljust(maxlength['username'])} | {'Action'.ljust(maxlength['action'])} | {'$'.ljust(maxlength['amount'])} | {'Time'.ljust(12)}\n"
+    table += "=" * (len(table)-1) + "\n"
+    for row in results:
+        table += f"{row['username'].center(maxlength['username'])} | " \
+                 f"{row['action'].ljust(maxlength['action'])} | " \
+                 f"{str(row['amount']).ljust(maxlength['amount'])} | " \
+                 f"{datetime.datetime.fromtimestamp(row['at']).strftime('%b-%d %H:%M')}\n"
+
+    response = f"""
+Last 15 Updates for {target_user['username']}
+
+```
+{table}
+```
+"""
+    bot.reply_to(message, response)
 
 @bot.message_handler(commands=['onthejob'])
 @num_arguments(1)
@@ -301,7 +371,8 @@ def onthejob(message):
     if (bounty_participation := runtime['participation'][bounty['bounty_id']]) and user_id in bounty_participation:
         return bot.reply_to(message, strings['participating'])
 
-    print(bounty_participation)
+    if len(bounty_participation) >= bounty['worth']:
+        return bot.reply_to(message, strings['bounty_full'])
 
     c = db.cursor()
     sqlite_insert_with_param = "INSERT INTO participation(telegram_id, bounty_id) VALUES (?, ?);"
@@ -327,8 +398,9 @@ def onthejob(message):
     user['shares'] += shares
     bounty_participation.append(user_id)
 
-    add_log(user_id, user_id, 'onthejob', shares)
-    return bot.reply_to(message, f"Thanks for taking on `{bounty['name']}`! You earned {shares} share(s)!")
+    add_log(user_id, user_id, 'otj', shares, bounty['bounty_id'])
+    return bot.reply_to(message,
+                        f"Thanks for taking on `{bounty['name']}`! You've earned {pluralize(shares, 'share')}!")
 
 @bot.message_handler(commands=['abandon'])
 def abandon(message):
@@ -384,7 +456,7 @@ def abandon(message):
     user['shares'] -= shares
     bounty_participation.remove(user_id)
 
-    add_log(user_id, user_id, 'abandon', -shares)
+    add_log(user_id, user_id, 'aban', -shares, bounty['bounty_id'])
     return bot.reply_to(message, f"A real G knows when they're in over their head. "
                                  f"You've left the bounty `{bounty['name']}` and the shares have been removed.")
 
@@ -396,10 +468,10 @@ def leaderboard(message):
     maxlength = len(max(runtime['users'].values(), key=lambda x: len(x['username']))['username'])
     users = sorted(runtime['users'].values(), key=lambda item: item['shares'], reverse=True)
 
-    user_list = f"{'User'.ljust(maxlength, ' ')} | Shares\n"
+    user_list = f"{'User'.ljust(maxlength)} | Shares\n"
     user_list += "=" * len(user_list) + "\n"
     for user in users:
-        user_list += f"{user['username'].ljust(maxlength, ' ')} | {user['shares']}\n"
+        user_list += f"{user['username'].ljust(maxlength)} | {user['shares']}\n"
 
     response = f"""
 *Total Allocation*: {creds_invested()} CRED
@@ -449,7 +521,8 @@ def bump(message: telebot.types.Message):
     target_user['shares'] += shares
     add_log(message.from_user.id, target_user['telegram_id'], 'bump', shares)
 
-    response = f"{parse_user(message.from_user)} 🤜💥🤛 {target_user['username']}!  {shares} share(s) added!"
+    response = f"{parse_user(message.from_user)} 🤜💥🤛 {target_user['username']}!\n" \
+               f"{pluralize(shares, 'share')} added!"
     bot.send_message(message.chat.id, response)
 
 @bot.message_handler(commands=['bountylist'])
@@ -459,15 +532,21 @@ def bountylist(message):
     if not len(bounties):
         return bot.reply_to(message, "There are no active bounties at this time.")
 
-    bounty_list = "Name (ID) | Bounty | Signup ends\n"
+    bounty_list = "ID: Name" + " ↳ Space | Time left\n".rjust(23)
     for bounty_id, bounty in bounties.items():
-        bounty_list += f"{bounty['name']} (ID {bounty['bounty_id']}) | {bounty['worth']} CRED | {display_time(bounty['endtime'] - now())}\n"
+        space_left = bounty['worth'] - len(runtime['participation'][bounty['bounty_id']])
+        availability = f"{space_left}/{bounty['worth']}" if space_left else "Full!"
+
+        bounty_list += f"{bounty['bounty_id']}: {bounty['name']} \n"
+        bounty_list += f"{availability} | {display_time(bounty['endtime'] - now())}".rjust(31) + "\n"
 
     response = f"""
 *Active bounties*
 
-{bounty_list}
-Join a bounty using `/onthejob [ID / Name]`
+```
+{bounty_list.rstrip()}
+```
+Join a bounty using `/onthejob [ID]`
 """
     bot.send_message(message.chat.id, response)
 
@@ -488,8 +567,8 @@ def remove_bounty(bounty: dict):
     #     print(e)
     #     return bot.reply_to(message, strings['general_error'])
     # Update the participating users
-    sqlite_insert_with_param = "UPDATE bounties SET is_active = FALSE WHERE bounty_id = ?;"
-    data_tuple = (bounty['bounty_id'],)
+    sqlite_insert_with_param = "UPDATE bounties SET endtime = ? AND is_active = FALSE WHERE bounty_id = ?;"
+    data_tuple = (now(), bounty['bounty_id'],)
     try:
         c.execute(sqlite_insert_with_param, data_tuple)
     except sqlite3.IntegrityError as e:
@@ -529,9 +608,10 @@ def grant(message):
 
     db.commit()
 
-    add_log(message.from_user.id, target_user['telegram_id'], 'grant', shares)
+    target_user['shares'] += shares
+    add_log(message.from_user.id, target_user['telegram_id'], 'gr', shares)
 
-    response = f"{target_user['username']} received {shares} shares from {parse_user(message.from_user)} 🤑"
+    response = f"{target_user['username']} received {pluralize(shares, 'share')} from {parse_user(message.from_user)} 🤑"
     bot.send_message(message.chat.id, response)
 
 @bot.message_handler(commands=['cashout'])
@@ -561,17 +641,17 @@ def cashout(message):
 
     db.commit()
 
-    add_log(message.from_user.id, target_user['telegram_id'], 'cashout', -shares)
+    add_log(message.from_user.id, target_user['telegram_id'], '$out', -shares)
 
     target_user['shares'] -= shares
     response = f"{target_user['username']} took the money and ran! 🤑\n" \
-               f"{shares} shares redeemed, with {target_user['shares']} left."
+               f"{pluralize(shares, 'share')} redeemed, with {pluralize(target_user['shares'], 'share')} left."
     bot.reply_to(message, response)
 
-def add_log(from_id, to_id, action, value):
+def add_log(from_id, to_id, action, value, subject=''):
     c = db.cursor()
-    log_query = "INSERT INTO log VALUES (?,?,?,?,?)"
-    data = (from_id, to_id, action, value, now())
+    log_query = "INSERT INTO log VALUES (?,?,?,?,?,?)"
+    data = (from_id, to_id, action, subject, value, now())
     try:
         c.execute(log_query, data)
     except sqlite3.Error as e:
@@ -596,7 +676,8 @@ def setup():
             name VARCHAR(50) NOT NULL,	
             worth INTEGER NOT NULL,
             endtime DATE NOT NULL,
-            is_active BOOLEAN DEFAULT TRUE     
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at DATE NOT NULL
         );
     ''')
 
@@ -605,7 +686,8 @@ def setup():
             telegram_id INTEGER PRIMARY KEY NOT NULL,
             username VARCHAR(50) NOT NULL,
             shares INTEGER NOT NULL,
-            is_admin BOOLEAN DEFAULT FALSE
+            is_admin BOOLEAN DEFAULT FALSE,
+            created_at DATE NOT NULL
         ); 
     ''')
 
@@ -623,6 +705,7 @@ def setup():
             from_id INTEGER NOT NULL,
             to_id INTEGER NOT NULL,
             action VARCHAR(20) NOT NULL,
+            subject VARCHAR(50) NOT NULL,
             amount INTEGER NOT NULL,
             at DATE NOT NULL
         );
@@ -636,7 +719,7 @@ def setup():
     ''')
 
     cursor = db.cursor()
-    cursor.execute("SELECT * FROM bounties WHERE endtime < date('now') and is_active = TRUE")
+    cursor.execute("SELECT * FROM bounties")
     for row in cursor.fetchall():
         runtime['bounties'][row['bounty_id']] = dict(row)
 
@@ -646,9 +729,7 @@ def setup():
         runtime['users'][row['telegram_id']] = dict(row)
 
     cursor = db.cursor()
-    cursor.execute('SELECT * FROM participation '
-                   'INNER JOIN bounties b on participation.bounty_id = b.bounty_id '
-                   'WHERE is_active = TRUE')
+    cursor.execute('SELECT * FROM participation')
     for row in cursor.fetchall():
         runtime['participation'][row['bounty_id']] += [row['telegram_id']]
 
