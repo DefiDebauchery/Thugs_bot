@@ -1,28 +1,30 @@
-import sqlite3
 import datetime
-import shlex
-import telebot
+import json
 import os
-from dotenv import load_dotenv
+import shlex
+import sqlite3
+import telebot
 from collections import defaultdict
-from unidecode import unidecode
+from dotenv import load_dotenv
+from urllib.request import urlopen, Request
 
 load_dotenv()
 
 if (API_TOKEN := os.getenv('API_KEY_TG')) is None:
     raise EnvironmentError('No API Key defined!')
 
-runtime = {
-    'users'        : defaultdict(dict),
-    'bounties'     : defaultdict(dict),
-    'participation': defaultdict(list),
-    'settings'     : defaultdict(dict)
-}
-
 fallback = {
+    'allocation'    : '$100',
     'initial_shares': 10,
     'bump_shares'   : 1,
     'otj_shares'    : 1
+}
+
+runtime = {
+    'users'        : defaultdict(dict),
+    'bounties'     : defaultdict(dict),
+    'participation': defaultdict(list), # List
+    'settings'     : fallback
 }
 
 strings = {
@@ -56,7 +58,7 @@ def num_arguments(required=0):
     def outer_wrapper(f):
         def wrapper(*args, **kwargs):
             message = args[0]
-            if len(shlex.split(unidecode(message.text))) == required + 1:
+            if len(shlex.split(fix_quotes(message.text))) == required + 1:
                 return f(*args, **kwargs)
             else:
                 bot.reply_to(message, f"🙅‍♂️ This command requires exactly {pluralize(required, 'argument')}! "
@@ -129,6 +131,20 @@ def parse_user(user: telebot.types.User):
 def pluralize(amount, string):
     return f"{amount} {string}" + ('s' if amount != 1 else '')
 
+def fix_quotes(text):
+    return text.translate({0x201c: '"', 0x201d: '"', 0x2018: "'", 0x2019: "'"})
+
+def indexof(lst, idx):
+    try:
+        res = lst[idx]
+    except IndexError:
+        res = None
+
+    return res
+
+def get_setting(key):
+    return runtime['settings'].get(key, None)
+
 @bot.message_handler(commands=['help'])
 def help_message(message):
     resp = """
@@ -164,7 +180,7 @@ def register(message):
     if user_id in runtime['users']:
         return bot.reply_to(message, f"{username}, you're already registered!")
 
-    shares = runtime['settings'].get('initial_shares', fallback['initial_shares'])
+    shares = get_setting('initial_shares')
     created_at = now()
 
     # create new entry in the users table
@@ -194,7 +210,7 @@ def register(message):
 @num_arguments(3)
 def addbounty(message):
     # Replace smart quotes and treat them as a single argument
-    args = shlex.split(unidecode(message.text))
+    args = shlex.split(fix_quotes(message.text))
 
     bounty_name = args[1]
 
@@ -243,7 +259,7 @@ This bounty is open for {display_time(bounty_time_limit * 60)}. GO GO GO!
 @num_arguments(1)
 def endbounty(message):
     # get the args
-    args = shlex.split(unidecode(message.text))
+    args = shlex.split(fix_quotes(message.text))
     bounty_name = args[1]
 
     bounty_id = parse_int(bounty_name)
@@ -280,7 +296,8 @@ def audit(message):
     else:
         return bot.reply_to(message, f"I don't know anything about Bounty ID {bounty_id}.")
 
-    running_time = f"Ends in {display_time(bounty['endtime'] - now())}" if (bounty['is_active'] and bounty['endtime'] > now()) \
+    running_time = f"Ends in {display_time(bounty['endtime'] - now())}" if (
+                bounty['is_active'] and bounty['endtime'] > now()) \
         else f"Ran for {display_time(bounty['endtime'] - bounty['created_at'])}"
 
     participation_list = [runtime['users'][k]['username'] for k in runtime['participation'][bounty_id] if
@@ -320,12 +337,12 @@ def showlog(message):
 
     maxlength = {
         'username': len(max(results, key=lambda x: len(x['username']))['username']),
-        'action': len(max(results, key=lambda x: len(x['action']))['action']),
-        'amount': len(str(max(results, key=lambda x: len(str(x['amount'])))['amount']))
+        'action'  : len(max(results, key=lambda x: len(x['action']))['action']),
+        'amount'  : len(str(max(results, key=lambda x: len(str(x['amount'])))['amount']))
     }
 
     table = f"{'From'.ljust(maxlength['username'])} | {'Action'.ljust(maxlength['action'])} | {'$'.ljust(maxlength['amount'])} | {'Time'.ljust(12)}\n"
-    table += "=" * (len(table)-1) + "\n"
+    table += "=" * (len(table) - 1) + "\n"
     for row in results:
         table += f"{row['username'].center(maxlength['username'])} | " \
                  f"{row['action'].ljust(maxlength['action'])} | " \
@@ -348,7 +365,7 @@ def onthejob(message):
     args = str(message.text).split()
     bounty_name = ' '.join(args[1:])  # Don't require quotes since it's a single argument
     user_id = message.from_user.id
-    shares = runtime['settings'].get('otj_shares', fallback['otj_shares'])
+    shares = get_setting('otj_shares')
 
     if (user := runtime['users'].get(user_id)) is None:
         return bot.reply_to(message, strings['unknown_user'])
@@ -408,7 +425,7 @@ def abandon(message):
     args = str(message.text).split()
     bounty_name = ' '.join(args[1:])  # Don't require quotes since it's a single argument
     user_id = message.from_user.id
-    shares = runtime['settings'].get('otj_shares', fallback['otj_shares'])
+    shares = get_setting('otj_shares')
 
     if (user := runtime['users'].get(user_id)) is None:
         return bot.reply_to(message, strings['unknown_user'])
@@ -468,14 +485,15 @@ def leaderboard(message):
     maxlength = len(max(runtime['users'].values(), key=lambda x: len(x['username']))['username'])
     users = sorted(runtime['users'].values(), key=lambda item: item['shares'], reverse=True)
 
-    user_list = f"{'User'.ljust(maxlength)} | Shares\n"
-    user_list += "=" * len(user_list) + "\n"
+    user_list = f"{'User'.ljust(maxlength)} | Joined | Shares\n"
+    user_list += "=" * (len(user_list)-1) + "\n"
     for user in users:
-        user_list += f"{user['username'].ljust(maxlength)} | {user['shares']}\n"
+        user_list += f"{user['username'].ljust(maxlength)} | " \
+                     f"{datetime.datetime.fromtimestamp(user['created_at']).strftime('%b %d')} | " \
+                     f"{user['shares']}\n"
 
     response = f"""
-*Total Allocation*: {creds_invested()} CRED
-*Amount Available*: ?
+*Total Allocation*: {creds_invested()}
 
 ```
 {user_list}
@@ -502,7 +520,7 @@ def bump(message: telebot.types.Message):
     if target_user['telegram_id'] == message.from_user.id:
         return bot.reply_to(message, strings['self_bump'])
 
-    shares = runtime['settings'].get('bump_shares', fallback['bump_shares'])
+    shares = get_setting('bump_shares')
 
     c = db.cursor()
     sqlite_insert_with_param = "UPDATE users SET shares = shares + ? WHERE telegram_id = ?;"
@@ -549,6 +567,61 @@ def bountylist(message):
 Join a bounty using `/onthejob [ID]`
 """
     bot.send_message(message.chat.id, response)
+
+@bot.message_handler(commands=['config'])
+@admin_command
+def config(message):
+    args = shlex.split(fix_quotes(message.text))
+
+    if len(args) < 2:
+        return bot.reply_to(message, "Use `get <key>`, `set <key> <val>`, or `list`")
+
+    if args[1] == 'get':
+        value = runtime['settings'].get(indexof(args, 2), u"¯\\\_(ツ)\_/¯")
+        return bot.reply_to(message, f"`{value}")
+
+    if args[1] == 'set':
+        if (key := indexof(args, 2)) is None or (val := indexof(args, 3)) is None:
+            return bot.reply_to(message, f"Please set a value for `{key}`!")
+
+        c = db.cursor()
+        query = 'INSERT INTO settings (setting_name, setting_value) VALUES (?,?) ' \
+                'ON CONFLICT(setting_name) DO UPDATE SET setting_value=excluded.setting_value'
+        data = (key, val)
+        try:
+            c.execute(query, data)
+            db.commit()
+        except sqlite3.Error as e:
+            print('config error', e)
+            return bot.reply_to(message, f"There was an error applying the config for `{key}` :(")
+
+        runtime['settings'][key] = val
+        return bot.reply_to(message, f"Setting saved for `{key}`")
+
+    if args[1] == 'show':
+        maxlen_k = (len(max(runtime['settings'].keys(), key=lambda x: len(x))))
+        maxlen_v = (len(max(runtime['settings'].values(), key=lambda x: len(str(x)))))
+
+        if maxlen_v > 20:
+            maxlen_v = 20
+
+        setting_list = f"{'Setting'.ljust(maxlen_k)} | {'Value'.ljust(maxlen_v)}\n"
+        setting_list += "=" * (len(setting_list)-1) + "\n"
+
+        for k, v in runtime['settings'].items():
+            v = str(v)
+            setting_list += f"{k.ljust(maxlen_k)} | {v if len(v) <= 20 else v[:17] + '...'}\n"
+
+        response = f"""
+*Current Runtime Configuration*
+
+```
+{setting_list.rstrip()}
+```
+        """
+        return bot.send_message(message.chat.id, response)
+
+    bot.reply_to(message, "Uh, your choices are `get`, `set`, or `show`. Don't get cute.")
 
 def remove_bounty(bounty: dict):
     c = db.cursor()
@@ -664,10 +737,7 @@ def add_log(from_id, to_id, action, value, subject=''):
     db.commit()
 
 def creds_invested():
-    c = db.cursor()
-    c.execute("select sum(worth) from bounties;")
-    result = c.fetchone()
-    return result[0]
+    return get_setting('allocation')
 
 def setup():
     db.cursor().execute('''
@@ -712,7 +782,7 @@ def setup():
     ''')
     db.cursor().execute('''
         CREATE TABLE IF NOT EXISTS settings (
-            setting_id INTEGER NOT NULL,
+            setting_id INTEGER PRIMARY KEY AUTOINCREMENT,
             setting_name VARCHAR(50) UNIQUE NOT NULL,
             setting_value VARCHAR(255) NOT NULL
         )
@@ -736,7 +806,7 @@ def setup():
     cursor = db.cursor()
     cursor.execute('SELECT * FROM settings')
     for row in cursor.fetchall():
-        runtime['settings'][row['setting_name']] = dict(row)
+        runtime['settings'][row['setting_name']] = row['setting_value']
 
 def script_exit():
     db.close()
