@@ -483,17 +483,19 @@ def leaderboard(message):
         return bot.reply_to(message, 'There are currently no registered users!')
 
     maxlength = len(max(runtime['users'].values(), key=lambda x: len(x['username']))['username'])
+    totalshares = sum((map(lambda x: x['shares'], runtime['users'].values())))
     users = sorted(runtime['users'].values(), key=lambda item: item['shares'], reverse=True)
 
-    user_list = f"{'User'.ljust(maxlength)} | Joined | Shares\n"
+    user_list = f"{'User'.ljust(maxlength)} | Joined | Shares (%)\n"
     user_list += "=" * (len(user_list)-1) + "\n"
     for user in users:
         user_list += f"{user['username'].ljust(maxlength)} | " \
                      f"{datetime.datetime.fromtimestamp(user['created_at']).strftime('%b %d')} | " \
-                     f"{user['shares']}\n"
+                     f"{user['shares']} ({round(user['shares'] / totalshares * 100, 2)}%)\n"
 
     response = f"""
-*Total Allocation*: {creds_invested()}
+*Reward Allocation*: {creds_invested()}
+*Total Shares*: {totalshares}
 
 ```
 {user_list}
