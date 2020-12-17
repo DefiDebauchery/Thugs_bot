@@ -327,8 +327,9 @@ def showlog(message):
     if user is None:
         return bot.reply_to(message, strings['unknown_target'])
 
-    query = "SELECT IIF(from_id = to_id, '<Self>', u.username) AS username, " \
-            "IIF(subject, action || ' (' || subject || ')', action) as action, amount, at FROM log " \
+    query = "SELECT CASE WHEN from_id = to_id THEN '<Self>' ELSE u.username END AS username, " \
+            "CASE WHEN subject THEN action || ' (' || subject || ')' ELSE action END AS action, " \
+            "amount, at FROM log " \
             "INNER JOIN users u ON u.telegram_id = from_id " \
             "WHERE to_id = ? ORDER BY at DESC LIMIT 15"
 
@@ -355,7 +356,7 @@ def showlog(message):
                  f"{datetime.datetime.fromtimestamp(row['at']).strftime('%b-%d %H:%M')}\n"
 
     response = f"""
-Last 15 Updates for {escape_username(user['username'])}
+Last {len(results)} Updates for {escape_username(user['username'])}
 
 ```
 {table}
@@ -689,7 +690,7 @@ def grant(message):
     db.commit()
 
     target_user['shares'] += shares
-    add_log(message.from_user.id, target_user['telegram_id'], 'gr', shares)
+    add_log(message.from_user.id, target_user['telegram_id'], 'grnt', shares)
 
     response = f"{escape_username(target_user['username'])} received {pluralize(shares, 'share')} from {escape_username(parse_user(message.from_user))} 🤑"
     bot.send_message(message.chat.id, response)
