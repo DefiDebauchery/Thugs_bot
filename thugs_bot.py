@@ -145,6 +145,9 @@ def indexof(lst, idx):
 def get_setting(key):
     return runtime['settings'].get(key, None)
 
+def escape_username(username):
+    return username.replace("_", "\\_").replace("*", "\\*")
+
 @bot.message_handler(commands=['help'])
 def help_message(message):
     resp = """
@@ -177,8 +180,10 @@ def register(message):
     if (username := message.from_user.username) is None:
         username = message.from_user.first_name
 
+    esc_username = escape_username(username)
+
     if user_id in runtime['users']:
-        return bot.reply_to(message, f"{username}, you're already registered!")
+        return bot.reply_to(message, f"{esc_username}, you're already registered!")
 
     shares = get_setting('initial_shares')
     created_at = now()
@@ -202,7 +207,7 @@ def register(message):
 
     add_log(user_id, user_id, 'reg', shares)
 
-    resp = f"Welcome {username}! We've granted you {pluralize(shares, 'share')}!"
+    resp = f"Welcome {esc_username}! We've granted you {pluralize(shares, 'share')}!"
     bot.reply_to(message, resp)
 
 @bot.message_handler(commands=['addbounty'])
@@ -300,8 +305,8 @@ def audit(message):
                 bounty['is_active'] and bounty['endtime'] > now()) \
         else f"Ran for {display_time(bounty['endtime'] - bounty['created_at'])}"
 
-    participation_list = [runtime['users'][k]['username'] for k in runtime['participation'][bounty_id] if
-                          k in runtime['users']]
+    participation_list = [escape_username(runtime['users'][k]['username']) for k in
+                          runtime['participation'][bounty_id] if k in runtime['users']]
 
     response = f"""
 Bounty {bounty['bounty_id']}:  `{bounty['name']}`
@@ -341,7 +346,7 @@ def showlog(message):
         'amount'  : len(str(max(results, key=lambda x: len(str(x['amount'])))['amount']))
     }
 
-    table = f"{'From'.ljust(maxlength['username'])} | {'Action'.ljust(maxlength['action'])} | {'$'.ljust(maxlength['amount'])} | {'Time'.ljust(12)}\n"
+    table = f"{'From'.ljust(maxlength['username'])} | {'Act'.ljust(maxlength['action'])} | {'$'.ljust(maxlength['amount'])} | {'Time'.ljust(12)}\n"
     table += "=" * (len(table) - 1) + "\n"
     for row in results:
         table += f"{row['username'].center(maxlength['username'])} | " \
@@ -350,7 +355,7 @@ def showlog(message):
                  f"{datetime.datetime.fromtimestamp(row['at']).strftime('%b-%d %H:%M')}\n"
 
     response = f"""
-Last 15 Updates for {target_user['username']}
+Last 15 Updates for {escape_username(target_user['username'])}
 
 ```
 {table}
@@ -541,7 +546,7 @@ def bump(message: telebot.types.Message):
     target_user['shares'] += shares
     add_log(message.from_user.id, target_user['telegram_id'], 'bump', shares)
 
-    response = f"{parse_user(message.from_user)} 🤜💥🤛 {target_user['username']}!\n" \
+    response = f"{escape_username(parse_user(message.from_user))} 🤜💥🤛 {escape_username(target_user['username'])}!\n" \
                f"{pluralize(shares, 'share')} added!"
     bot.send_message(message.chat.id, response)
 
@@ -576,11 +581,11 @@ def config(message):
     args = shlex.split(fix_quotes(message.text))
 
     if len(args) < 2:
-        return bot.reply_to(message, "Use `get <key>`, `set <key> <val>`, or `list`")
+        return bot.reply_to(message, "Use `get <key>`, `set <key> <val>`, or `show`")
 
     if args[1] == 'get':
         value = runtime['settings'].get(indexof(args, 2), u"¯\\\_(ツ)\_/¯")
-        return bot.reply_to(message, f"`{value}")
+        return bot.reply_to(message, f"`{escape_username(value)}")
 
     if args[1] == 'set':
         if (key := indexof(args, 2)) is None or (val := indexof(args, 3)) is None:
@@ -686,7 +691,7 @@ def grant(message):
     target_user['shares'] += shares
     add_log(message.from_user.id, target_user['telegram_id'], 'gr', shares)
 
-    response = f"{target_user['username']} received {pluralize(shares, 'share')} from {parse_user(message.from_user)} 🤑"
+    response = f"{escape_username(target_user['username'])} received {pluralize(shares, 'share')} from {escape_username(parse_user(message.from_user))} 🤑"
     bot.send_message(message.chat.id, response)
 
 @bot.message_handler(commands=['cashout'])
