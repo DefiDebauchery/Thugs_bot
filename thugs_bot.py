@@ -114,16 +114,16 @@ def parse_int(val):
 
     return val
 
-def parse_mention(message: telebot.types.Message):
+def user_from_mention(message: telebot.types.Message):
     if len(message.entities) < 2:
         return None
 
     entity = message.entities[1]
 
     if entity.type == 'text_mention':
-        return entity.user.first_name
+        return runtime['users'].get(entity.user.id, None)
 
-    return message.text[entity.offset + 1:entity.offset + entity.length]
+    return find_user_by_name(message.text[entity.offset + 1:entity.offset + entity.length])
 
 def parse_user(user: telebot.types.User):
     return user.username or user.first_name
@@ -322,9 +322,9 @@ Muscle ({len(participation_list)}/{bounty['worth']}): {', '.join(participation_l
 @admin_command
 @num_arguments(1)
 def showlog(message):
-    username = parse_mention(message)
+    user = user_from_mention(message)
 
-    if (target_user := find_user_by_name(username)) is None:
+    if user is None:
         return bot.reply_to(message, strings['unknown_target'])
 
     query = "SELECT IIF(from_id = to_id, '<Self>', u.username) AS username, " \
@@ -333,7 +333,7 @@ def showlog(message):
             "WHERE to_id = ? ORDER BY at DESC LIMIT 15"
 
     cursor = db.cursor()
-    cursor.execute(query, (target_user['telegram_id'],))
+    cursor.execute(query, (user['telegram_id'],))
 
     results = [dict(row) for row in cursor.fetchall()]
 
@@ -355,7 +355,7 @@ def showlog(message):
                  f"{datetime.datetime.fromtimestamp(row['at']).strftime('%b-%d %H:%M')}\n"
 
     response = f"""
-Last 15 Updates for {escape_username(target_user['username'])}
+Last 15 Updates for {escape_username(user['username'])}
 
 ```
 {table}
@@ -512,9 +512,9 @@ def leaderboard(message):
 @bot.message_handler(commands=['bump'])
 @num_arguments(1)
 def bump(message: telebot.types.Message):
-    target = parse_mention(message)
+    target_user = user_from_mention(message)
 
-    if (target_user := find_user_by_name(target)) is None:
+    if target_user is None:
         return bot.reply_to(message, strings['unknown_target'])
 
     """
@@ -665,10 +665,10 @@ def remove_bounty(bounty: dict):
 @admin_command
 @num_arguments(2)
 def grant(message):
-    target = parse_mention(message)
+    target_user = user_from_mention(message)
     args = str(message.text).split()
 
-    if (target_user := find_user_by_name(target)) is None:
+    if target_user is None:
         return bot.reply_to(message, strings['unknown_target'])
 
     if target_user['telegram_id'] == message.from_user.id:
@@ -698,10 +698,10 @@ def grant(message):
 @admin_command
 @num_arguments(2)
 def cashout(message):
-    target = parse_mention(message)
+    target_user = user_from_mention(message)
     args = str(message.text).split()
 
-    if (target_user := find_user_by_name(target)) is None:
+    if target_user is None:
         return bot.reply_to(message, strings['unknown_target'])
 
     if not (shares := parse_int(args[-1])) or shares < 0:
